@@ -144,7 +144,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         irlbtrfly.withdrawExpiredLocksTo(address(this));
         //unlockable
     }
-
 //    struct Claim {
 //       address token;
 //        address account;
@@ -152,26 +151,24 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
 //        bytes32[] merkleProof;???
 //    }
 
-//get total rewards from reward distributor 
-//divide it by the total nfts person owns
-//check much NFT's person owned
-//claim rewards per NFT
-//total amount of BTRFLY rewards
-//total amount of nfts owned 
-
 
     function irewardsdistributorclaim(address token, address account, uint256 amount, bytes32[] _merkleProof) external callerIsUser{
+        //get total rewards from reward distributor 
         totalhiddenhandrewards= irewardsdistributor.claim(address(this)); //btrfly & eth
         return totalhiddenhandrewards;
+
         address _owner = msg.sender;
         uint256 numberOfOwnedNFT = balanceOf(_owner);
         return numberOfOwnedNFT;
+        //check much NFT's person owned
+
         allocatedRLBTRFLYRewards = ((totalhiddenhandrewards/maxSupply)*numberOfOwnedNFT);
+        //divide total rewards by number of nfts owned per person
+
         IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), allocatedRLBTRFLYRewards);
+        //safe transfer allocated reward
 
-        //irewardsdistributor.claim(address(account)); 
     }
-
 
 
 //nft metadata
