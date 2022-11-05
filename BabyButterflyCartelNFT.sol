@@ -161,12 +161,12 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
 
 
     function irewardsdistributorclaim(address token, address account, uint256 amount, bytes32[] _merkleProof) external callerIsUser{
-        totalhiddenhandrewards= irewardsdistributor.claim(address(this)); 
+        totalhiddenhandrewards= irewardsdistributor.claim(address(this)); //btrfly & eth
         return totalhiddenhandrewards;
         address _owner = msg.sender;
         uint256 numberOfOwnedNFT = balanceOf(_owner);
         return numberOfOwnedNFT;
-        allocatedRLBTRFLYRewards = totalhiddenhandrewards/numberOfOwnedNFT;
+        allocatedRLBTRFLYRewards = ((totalhiddenhandrewards/maxSupply)*numberOfOwnedNFT);
         IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), allocatedRLBTRFLYRewards);
 
         //irewardsdistributor.claim(address(account)); 
