@@ -13,7 +13,7 @@ import "./IREWARDSDISTRIBUTOR.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
+import "hardhat/console.sol";
 
 contract BabyButterflyCartelNFT is ERC721A, Ownable {
     using Strings for uint256;
@@ -26,13 +26,22 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     address Btrfly;
     IRLBTRFLY public irlbtrfly;
     IREWARDSDISTRIBUTOR public irewardsdistributor;
+    
     //test addys
+    //[Contracts.BTRFLYV2]: '0x4bc4bba990fe31d529d987f7b8ccf79f1626e559',
     address RLBTRFLYAddress = 0xB4Ce286398C3EeBDE71c63A6A925D7823821c1Ee;
     address IREWARDSDISTRIBUTORAddress = 0xd756DfC1a5AFd5e36Cf88872540778841B318894;
+    //real addys
+    //[Contracts.BTRFLYV2]: '0xc55126051B22eBb829D00368f4B12Bde432de5Da',
+    //[Contracts.RLBTRFLY]: '0x742B70151cd3Bc7ab598aAFF1d54B90c3ebC6027',
+    //[Contracts.RewardDistributor]: '0xd7807E5752B368A6a64b76828Aaff0750522a76E',
+
     //Treasury rewards distrib values 
     uint public rlbutterflyPrincipalBalance;
     uint256 public allocatedRLBTRFLYRewards;
     uint256 public totalhiddenhandrewards;
+    //timer
+    uint256 public initialTime;
 
     uint256 public constant MaxPublicMint = 2;
     uint256 public constant MaxWhitelistMint = 5;
@@ -47,6 +56,8 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     bool public pause;
     bool public teamMinted;
 
+
+
     bytes32 private merkleRoot;
     
     mapping(address => uint256) public totalPublicMint;
@@ -60,6 +71,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
         irewardsdistributor = IREWARDSDISTRIBUTOR(IREWARDSDISTRIBUTORAddress);
         rlbutterflyPrincipalBalance = 0;
+        initialTime = block.timestamp;
 
     }
 
@@ -134,7 +146,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     }
 
     //Treasury functions
-//1  btrfly
+//1  lock btrfly from this contract to RLBTRFLY
      //send BTRFLY to IRLBTRFLY
     function BTRFLYlock(uint256 amount) external onlyOwner {
         irlbtrfly.lock(address(this), amount);
@@ -144,31 +156,40 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         irlbtrfly.withdrawExpiredLocksTo(address(this));
         //unlockable
     }
-//    struct Claim {
-//       address token;
-//        address account;
-//        uint256 amount;
-//        bytes32[] merkleProof;???
-//    }
 
-
-    function irewardsdistributorclaim(address token, address account, uint256 amount, bytes32[] _merkleProof) external callerIsUser{
+//2 Automatically unlock rewards with timer every 2 weeks.
+//address token,
+//address account,
+//uint256 amount,
+//bytes32[] _merkleProof
+    function irewardsdistributorclaim(address token, address account, uint256 amount, bytes32[] _merkleProof)  external onlyOwner{
         //get total rewards from reward distributor 
-        totalhiddenhandrewards= irewardsdistributor.claim(address(this)); //btrfly & eth
-        return totalhiddenhandrewards;
+        uint256 nowTime = block.timestamp-initialTime;// time between deployment of contract and now. time since the unix epoch
+        console.log(nowTime);
+        if (nowTime > 1209600) { //2weeks
+            totalhiddenhandrewards = irewardsdistributor.claim(address(msg.sender)); //eth
+            console.log("Eth sent to contract ready to distribute please claim your eth rewards");
+            return totalhiddenhandrewards;
+        }
+        //call function using timer peroidically & WHEN BTRFLYlock =TRUE
+    }
 
+//3 user can claim rewards 
+    function claimrewardsperNFT() external callerIsUser{
         address _owner = msg.sender;
         uint256 numberOfOwnedNFT = balanceOf(_owner);
-        return numberOfOwnedNFT;
+        //return numberOfOwnedNFT;
         //check much NFT's person owned
 
         allocatedRLBTRFLYRewards = ((totalhiddenhandrewards/maxSupply)*numberOfOwnedNFT);
-        //divide total rewards by number of nfts owned per person
+        //divide total rewards by number of nfts then multiply per per person
 
-        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), allocatedRLBTRFLYRewards);
+        //IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), allocatedRLBTRFLYRewards);
+        //payable(msg.sender).transfer(address(this).balance);
+        _owner.transfer(msg.allocatedRLBTRFLYRewards);
         //safe transfer allocated reward
-
     }
+
 
 
 //nft metadata
