@@ -9,10 +9,11 @@ pragma solidity ^0.8.0;
 
 import "./ERC721A.sol";
 import "./IRLBTRFLY.sol";
-import "./IREWARDSDISTRIBUTOR.sol";
+import "./IRewardDistributor.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "hardhat/console.sol";
 
 contract BabyButterflyCartelNFT is ERC721A, Ownable {
@@ -25,7 +26,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     //redacted cartel butterfly address
     address Btrfly;
     IRLBTRFLY public irlbtrfly;
-    IREWARDSDISTRIBUTOR public irewardsdistributor;
+    IRewardDistributor public irewardsdistributor;
     
     //test addys
     //[Contracts.BTRFLYV2]: '0x4bc4bba990fe31d529d987f7b8ccf79f1626e559',
@@ -40,6 +41,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     uint public rlbutterflyPrincipalBalance;
     uint256 public allocatedRLBTRFLYRewards;
     uint256 public totalhiddenhandrewards;
+    
     //timer
     uint256 public initialTime;
 
@@ -56,12 +58,24 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     bool public pause;
     bool public teamMinted;
 
-
-
     bytes32 private merkleRoot;
-    
+
+
+
     mapping(address => uint256) public totalPublicMint;
     mapping(address => uint256) public totalWhitelistMint;
+
+    mapping(address => Claim) public claimstruct;
+    address[] private claimfunctiontuple;
+
+    //mapping(address => uint256) private _claim;
+    event infoChanged(
+        address token,
+        address account,
+        uint256 amount,
+        bytes32[] merkleProof
+    );
+
     
     constructor(uint16 supply, address btrfly) ERC721A("Baby Butterfly Cartel", "BBC") {
         price = 0.025 ether; //1eth = 40 BTRFLY
@@ -69,10 +83,9 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         maxSupply = supply;
         Btrfly = btrfly;
         irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
-        irewardsdistributor = IREWARDSDISTRIBUTOR(IREWARDSDISTRIBUTORAddress);
+        irewardsdistributor = IRewardDistributor(IREWARDSDISTRIBUTORAddress);
         rlbutterflyPrincipalBalance = 0;
         initialTime = block.timestamp;
-
     }
 
     //stops botting from contract
@@ -148,6 +161,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     //Treasury functions
 //1  lock btrfly from this contract to RLBTRFLY
      //send BTRFLY to IRLBTRFLY
+     //permalocking 
     function BTRFLYlock(uint256 amount) external onlyOwner {
         irlbtrfly.lock(address(this), amount);
     }
@@ -162,17 +176,70 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
 //address account,
 //uint256 amount,
 //bytes32[] _merkleProof
-    function irewardsdistributorclaim(address token, address account, uint256 amount, bytes32[] _merkleProof)  external onlyOwner{
+//address token, address account, uint256 amount, bytes32[] calldata _merkleProof
+//pack a struct
+//e.g
+//tokn acc amt merkle
+
+        //function verify(
+        //bytes32[] memory proof,
+        //bytes32 root,
+        //bytes32 leaf
+    //) 
+
+    function getrewards() external onlyOwner {
+        //what is the merkleproof 
+        //mapping(address => Reward) public rewards;
+        irewardsdistributor.rewards(address(this));
+        //return irewardsdistributor.rewards[];
+
+        //[ rewards(address) method Response ]
+        //token   address :  0x0000000000000000000000000000000000000000
+        //merkleRoot   bytes32 :  0x0000000000000000000000000000000000000000000000000000000000000000
+        //proof   bytes32 :  0x0000000000000000000000000000000000000000000000000000000000000000
+        //updateCount   uint256 :  0
+    
+    //struct Reward {
+        //address token;
+        //bytes32 merkleRoot;
+        //bytes32 proof;
+        //uint256 updateCount;
+
+    }
+    function getmerkleProof() external onlyOwner {
+        //merkleProof,
+        //reward.merkleRoot,//root
+        // keccak256(abi.encodePacked(account, amount))//leaf
+
+        irewardsdistributor.rewards(address(this));
+    }
+
+    
+    function setclaimstruct(address token, address account, uint256 amount, bytes32[] calldata merkleProof)  internal returns (Claim[] memory)  {
+        //owner = msg.sender;
+        Claim[] memory claims;
+        claims[0] = Claim(token, account, amount, merkleProof);
+        return claims;
+        
+    }
+ 
+
+    function irewardsdistributorclaim (address token, address account, uint256 amount, bytes32[] calldata merkleProof)  external onlyOwner{
         //get total rewards from reward distributor 
         uint256 nowTime = block.timestamp-initialTime;// time between deployment of contract and now. time since the unix epoch
         console.log(nowTime);
-        if (nowTime > 1209600) { //2weeks
-            totalhiddenhandrewards = irewardsdistributor.claim(address(msg.sender)); //eth
+        if (nowTime > 1209600) { //1209600=2weeks
+        //Claim[] calldata claims
+        //address(token), address(this), amount, _merkleProof
+            irewardsdistributor.claim(setclaimstruct(token, account, amount, merkleProof)); //eth
+            //read the amount recieced and assign it to a uint256
             console.log("Eth sent to contract ready to distribute please claim your eth rewards");
-            return totalhiddenhandrewards;
         }
         //call function using timer peroidically & WHEN BTRFLYlock =TRUE
     }
+    
+    
+
 
 //3 user can claim rewards 
     function claimrewardsperNFT() external callerIsUser{
@@ -183,9 +250,10 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
 
         allocatedRLBTRFLYRewards = ((totalhiddenhandrewards/maxSupply)*numberOfOwnedNFT);
         //divide total rewards by number of nfts then multiply per per person
+        return allocatedRLBTRFLYRewards;
 
         //IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), allocatedRLBTRFLYRewards);
-        //payable(msg.sender).transfer(address(this).balance);
+        //payable(msg.sender).transfer(address(this).balance);//eth & BTRFLY
         _owner.transfer(msg.allocatedRLBTRFLYRewards);
         //safe transfer allocated reward
     }
