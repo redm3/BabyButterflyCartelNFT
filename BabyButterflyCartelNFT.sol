@@ -8,17 +8,19 @@
 pragma solidity ^0.8.0;
 
 import "./ERC721A.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+//import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "./IRLBTRFLY.sol";
 import "./IRewardDistributor.sol";
 //import "https://github.com/redacted-cartel/contracts-v2/blob/relocker-audit-findings-proxy/contracts/core/Relocker.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "hardhat/console.sol";
 
-contract BabyButterflyCartelNFT is ERC721A, Ownable {
+
+contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     using Strings for uint256;
     using SafeERC20 for IERC20;
 
@@ -40,12 +42,24 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     //[Contracts.RewardDistributor]: '0xd7807E5752B368A6a64b76828Aaff0750522a76E',
 
     //Treasury rewards distrib values 
-    uint public principalBalance;//BTRFLY
+    // rewardPerBBC tracks the cumulative amount of ETH awarded for each BBC since the protocol's inception.
+    uint public rewardPerBBC;
+
+    // ethprincipalBalance tracks the treasury's principal stETH balance.
+    uint public ethprincipalBalance;//BTRFLY
+
+    // allocatedEthRewards tracks the current amount of ETH that has been allocated to god owners.
+    uint public allocatedEthRewards;
+
+    // updateCallerReward expresses, in basis points, the percentage of newRewards paid to the function
+    // caller, as an incentive to pay the gas prices for calling update functions.
+    uint public updateCallerReward;
+
     uint public v2Rewards;//BTRFLY rewards  https://app.redacted.finance/1/rewards/%7BwalletAddress%7D
-    uint256 public totalhiddenhandrewards;//ETH rewards https://hhand.xyz/reward/0/0x9f74662ad05840ba35d111930501c617920dd68e
+    uint public totalhiddenhandrewards;//ETH rewards https://hhand.xyz/reward/0/0x9f74662ad05840ba35d111930501c617920dd68e
     //Btrfly -> locked into RLBTRFLY = V2 rewards + Hidden rewards 
     //timer
-    uint256 public initialTime;
+    //uint256 public initialTime;
 
     uint256 public constant MaxPublicMint = 2;
     uint256 public constant MaxWhitelistMint = 5;
@@ -53,6 +67,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     string private  baseTokenUri;
     string public   placeholderTokenUri;
     string private  hhapi;
+    string private  v2api;
 
     //deploy smart contract, toggle WL, toggle WL when done, toggle publicSale 
     bool public isRevealed;
@@ -67,34 +82,47 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     mapping(address => uint256) public totalWhitelistMint;
 
 
-    mapping(address => Claim) public claimstruct;
-    address[] private claimfunctiontuple;
+    //mapping(address => Claim) public claimstruct;
+    //address[] private claimfunctiontuple;
 
 
     // maps NFTtokenId to epochs rewards
-    mapping (address => uint256) public v2Rewards; //2 weeks\
+    mapping (address => uint256) public v2Reward; //2 weeks\
     mapping (address => uint256) public hiddenHandRewards; 
-    uint256 public totalepochrewards; //6weeks
 
-    //mapping(address => uint256) private _claim;
+    // claimedEpochs stores the amount of rewards per BBC that each address has claimed thus far.
+    mapping(address => uint) public claimedEpochs;
+
+    event RewardPerBBCUpdated(uint _rpb, address indexed _callerAddress);
+    event Relock(address indexed account, uint256 amount);
+    error ZeroAmount();
+    
     
     constructor(uint16 supply, address btrfly) ERC721A("Baby Butterfly Cartel", "BBC") {
         price = 0.025 ether; //1eth = 40 BTRFLY 10 btrfly
         priceBtrfly = 0.025 ether;
         maxSupply = supply;
         Btrfly = btrfly;
+        ethprincipalBalance = 0;
+        allocatedEthRewards = 0;
+        rewardPerBBC = 0;
+        // set caller reward to 1%
+        updateCallerReward = 100;
+        //contract interface
         irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
         irewardsdistributor = IRewardDistributor(IREWARDSDISTRIBUTORAddress);
-        rlbutterflyPrincipalBalance = 0;
-        initialTime = block.timestamp;
+        
     }
+
+        //btrfly.approve(irlbtrfly, type(uint256).max);
+    //}
+
 
     //stops botting from contract
     modifier callerIsUser() {
         require(tx.origin == msg.sender, "BBC :: Cannot be called by a contract");
         _;
     }   
-
     
     //change prices
     function changePrice(uint256 _newPrice) public onlyOwner{
@@ -159,51 +187,137 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         teamMinted = true;
         _safeMint(msg.sender, 20);
     }
-    // add permissions admin 
-    //Treasury functions
-    function depositBTRFLYlock(uint256 amount) external onlyAdmin {
-        irlbtrfly.lock(address(this), amount);
+  
+//Treasury functions
+//1
+    function depositBTRFLYlock(uint256 _btrflyAmt) external onlyOwner {
+        irlbtrfly.lock(address(this), _btrflyAmt);
+        ethprincipalBalance = ethprincipalBalance;
 
     }
-    //withdrawexpired locks to compound every unlock peroid
-    function BTRFLYwithdrawExpiredLocksTo() external onlyAdmin{
+    
+    function BTRFLYwithdrawExpiredLocksTo() external onlyOwner{
         irlbtrfly.withdrawExpiredLocksTo(address(this));
-        //unlockable
+        //unlockable or call relock proxy 
+        //https://github.com/redacted-cartel/contracts-v2/blob/relocker-audit-findings-proxy/contracts/core/Relocker.sol 
     }
+//2 claim
+/**
 
-    function setclaimstruct(address token, address account, uint256 amount, bytes32[] calldata merkleProof)  internal returns (Claim[] memory)  {
-        //owner = msg.sender;
+    function setclaimstruct(Common.Claim[] calldata claims, uint256 amount) pure internal returns (Claim[] memory) {
+        owner = msg.sender;
         Claim[] memory claims;
         claims[0] = Claim(token, account, amount, merkleProof);
         return claims;
-        
+        //irewardsdistributor.claim(claims);
+        //Common.Claim[] calldata claims
     }
-    function checkclaimablerewards(address token, address account, uint256 amount, bytes32[] calldata merkleProof) external callerIsUser {
+*/
+
+    function claim(Common.Claim[] calldata claims) external{ //2weeks
+        irewardsdistributor.claim(claims);
+    }
+
+    function claimAndLock(Common.Claim[] calldata claims, uint256 _btrflyAmt) external{//16weeks
+    //
+        if (_btrflyAmt == 0) revert ZeroAmount();
+
+        irewardsdistributor.claim(claims);
+        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), _btrflyAmt);
+        irlbtrfly.lock(msg.sender, _btrflyAmt);
+
+        emit Relock(msg.sender, _btrflyAmt);
+    }
+/**
+    //set tuple for claim
+    //function setclaimstruct(address token, address account, uint256 amount, bytes32[] calldata merkleProof) pure internal returns (Claim[] memory) {
+        //owner = msg.sender;
+        //Claim[] memory claims;
+        //claims[0] = Claim(token, account, amount, merkleProof);
+       //return claims;
+        //irewardsdistributor.claim(claims);
+        //Common.Claim[] calldata claims
+    }
+    function EOAclaimableglobalrewards() external callerIsUser {
         //EOA  
         //takes in the claim struct array
-        return hhapi;
+        //return hhapi;
+        //return v2api;
         //calls the rewards distrib claim function passing that paramiter 
+        //irewardsdistributor.claim(setclaimstruct(Claim(token, account, amount, merkleProof)));
+        //updates balance for each address for the two rewards thru mapping each nft to its address
+        //rewards is directly transftered to NFT owner 
+        //uint256 principalBalance;
+    }
+
+    function checkclaimablerewards() external callerIsUser {
+        //EOA  
+        //takes in the claim struct array
+        //return hhapi;
+        //calls the rewards distrib claim function passing that paramiter 
+        //irewardsdistributor.claim();
         //irewardsdistributor.claim(setclaimstruct(token, account, amount, merkleProof));
         //updates balance for each address for the two rewards thru mapping each nft to its address
         //rewards is directly transftered to NFT owner 
+        //ownerBbcCount[msg.sender]++;
         //uint256 principalBalance;
 
     }
-    function EOAclaimablerewards() external callerIsUser {
-        //EOA  
-        //takes in the claim struct array
-        return hhapi;
-        return v2api;
-        //calls the rewards distrib claim function passing that paramiter 
-        irewardsdistributor.claim(setclaimstruct(token, account, amount, merkleProof));
-        //updates balance for each address for the two rewards thru mapping each nft to its address
-        //rewards is directly transftered to NFT owner 
-        //uint256 principalBalance;
 
+
+//3 distribute
+    /**
+        @notice this function updates rewardPerBBC based on the relationship between Eth prin bal
+        and actual eth in the contract
+    */
+    function updateETHRewardPerBBC() public nonReentrant {
+        uint256 ethBal = address(this).balance;
+        // If eth available in the contract, update rewardPerBBC, add newRewards to allocatedEthRewards.
+        if (ethBal > (ethprincipalBalance + allocatedEthRewards)) {
+        uint newRewards = ethBal - (ethprincipalBalance + allocatedEthRewards);
+        uint callerReward = newRewards * updateCallerReward / 10000;
+        newRewards = newRewards - callerReward;
+        rewardPerBBC = rewardPerBBC + newRewards / totalSupply();
+        allocatedEthRewards = allocatedEthRewards + newRewards;
+        emit RewardPerBBCUpdated(rewardPerBBC, msg.sender);
+
+        if(callerReward > 0){
+            payable(msg.sender).transfer(callerReward);
+
+            }
+        }
+    }
+
+    /**
+        @notice getPendingEthReward returns the amount of ETH that has accrued to the user
+        and has yet to be claimed.
+    */
+    function getPendingETHReward(address _user) public view returns (uint256)
+    {
+        return (balanceOf(_user) * (rewardPerBBC - claimedEpochs[_user]));
+    }
+    
+    /**
+        @notice internal helper function for claimEthRewards
+    */
+    function _claimEthRewards(address _user) internal nonReentrant{
+        uint256 currentRewards = getPendingETHReward(_user);
+        if (currentRewards > 0) {
+        allocatedEthRewards = allocatedEthRewards - currentRewards;
+        claimedEpochs[_user] = rewardPerBBC;
+        payable(msg.sender).transfer(currentRewards);
+        }
+    }
+
+    /**
+        @notice _claimEthRewards is called to claim rewards on behalf of a user.
+    */
+    function claimEthRewards(address _user) external{
+        require(balanceOf(_user) > 0, "Can only claim if balance of user > 0");
+        _claimEthRewards(_user);
     }
 
 /**
-
 //2 Automatically unlock rewards with timer every 2 weeks.
 
     function getrewards() external onlyOwner {
@@ -219,11 +333,9 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         //irewardsdistributor.rewards(address(this));
     }
 
-    
     //https://github.com/redacted-cartel/contracts-v2/blob/relocker-audit-findings-proxy/contracts/core/Relocker.sol
     //https://etherscan.io/address/0x025c6da5bd0e6a5dd1350fda9e3b6a614b205a1f#code// ape airdrop
  
-
     function irewardsdistributorclaim (address token, address account, uint256 amount, bytes32[] calldata merkleProof)  external onlyOwner{
         return hhapi;
         return v2api; 
@@ -235,7 +347,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         }
         //call function using timer peroidically & WHEN BTRFLYlock =TRUE
     }
-    
     
 //has this nft claimed its rewards 
 //mapping of token ID >>.has claimed bool statement
@@ -282,8 +393,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         _owner.transfer(msg.allocatedRLBTRFLYRewards);
         //safe transfer allocated reward
     }
-
-
         function claimepochrewardsperNFT(uint256[] calldata tokenIds) external callerIsUser{
         uint256 tokenId;
         epochrewards -= tokenIds.length;
@@ -304,7 +413,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         _owner.transfer(msg.allocatedRLBTRFLYRewards);
         //safe transfer allocated reward
     }
-
 */
 
 //nft metadata
@@ -339,7 +447,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         return ownerIds;
     }
 
-
     //onlyowner functions
     //api
     function sethhapi(string memory _hhapi) external onlyOwner{
@@ -351,7 +458,16 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
         v2api = _v2api;
         //https://app.redacted.finance/1/rewards/%7BwalletAddress%7D
     }
-    
+    /**
+        @notice setUpdateCallerReward updates the reward percentage paid to the function caller for
+        calling updateRewardPerBBC.
+        @param _amt The amount to set the reward to, in basis points (i.e. 100 = 1%)
+    */
+    function setUpdateCallerReward(uint _amt) external onlyOwner{
+        require(_amt <= 100, "hardcode max caller reward is 1%");
+        updateCallerReward = _amt;
+    }
+
     //nft
     function setTokenUri(string memory _baseTokenUri) external onlyOwner{
         baseTokenUri = _baseTokenUri;
@@ -377,7 +493,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable {
     function withdraw() external onlyOwner{
         payable(msg.sender).transfer(address(this).balance);
     }
-
 
     function collectBtrfly() public onlyOwner{
         uint256 bal = IERC20(Btrfly).balanceOf(address(this));
