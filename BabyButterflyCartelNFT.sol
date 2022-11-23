@@ -73,7 +73,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     
     
     constructor(uint16 supply, address btrfly) ERC721A("Baby Butterfly Cartel", "BBC") {
-        priceBtrfly = 0.025 ether;
+        priceBtrfly = 1 ether;
         maxSupply = supply;
         Btrfly = btrfly;
         ethprincipalBalance = 0;
@@ -84,6 +84,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         //contract interface
         irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
         irewardsdistributor = IRewardDistributor(IREWARDSDISTRIBUTORAddress);
+        IERC20(Btrfly).approve(RLBTRFLYAddress, type(uint256).max);
     }
 
     //stops botting from contract
@@ -92,38 +93,35 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         _;
     }
 
-    //change prices
-    function changePrice(uint256 _newPrice) public onlyOwner{
-        price = _newPrice;
-    }
+    //change price
 
     function changepriceBtrfly(uint256 _newPrice) public onlyOwner{
         priceBtrfly = _newPrice;
     }
     //WL mints
-    function whitelistmintWithBtrfly(bytes32[] memory _merkleProof, uint256 _quantity, uint256 _cost) external callerIsUser{
+    function whitelistmintWithBtrfly(bytes32[] memory _merkleProof, uint256 _quantity, uint256 _costBtrfly) external callerIsUser{
         require(whiteListSale, "BBC :: Minting is on Pause");
         require((totalSupply() + _quantity) <= maxSupply, "BBC :: Cannot mint beyond max supply");
         require((totalWhitelistMint[msg.sender] + _quantity)  <= MaxWhitelistMint, "BBC :: Cannot mint beyond whitelist max mint!");
-        require(_cost  >= (price * _quantity), "BBC :: Payment is below the price");
+        require(_costBtrfly  == (priceBtrfly * _quantity), "BBC :: Payment is below the price");
         //create leaf node
         bytes32 sender = keccak256(abi.encodePacked(msg.sender));
         require(MerkleProof.verify(_merkleProof, merkleRoot, sender), "BBC :: You are not whitelisted");
 
         totalWhitelistMint[msg.sender] += _quantity;
-        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), _cost);
+        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), _costBtrfly);
         _safeMint(msg.sender, _quantity);
     }
 
     //Public mints
-    function mintWithBtrfly(uint256 _quantity, uint256 _cost) external callerIsUser{
+    function mintWithBtrfly(uint256 _quantity, uint256 _costBtrfly) external callerIsUser{
         require(publicSale, "BBC :: Not Yet Active.");
         require((totalSupply() + _quantity) <= maxSupply, "BBC :: Beyond Max Supply");
         require((totalPublicMint[msg.sender] +_quantity) <= MaxPublicMint, "BBC :: Already minted 200 times!");
-        require(_cost >= (priceBtrfly  * _quantity), "BBC :: Below ");
+        require(_costBtrfly == (priceBtrfly  * _quantity), "BBC :: Below ");
 
         totalPublicMint[msg.sender] += _quantity;
-        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), _cost);
+        IERC20(Btrfly).safeTransferFrom(msg.sender, address(this), _costBtrfly);
         _safeMint(msg.sender, _quantity);
     }
 
@@ -136,20 +134,21 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
 //Treasury functions
 //1
     function depositBTRFLYlock(uint256 _btrflyAmt) external onlyOwner {
-        irlbtrfly.lock(address(this), _btrflyAmt);
+        if (_btrflyAmt == 0) revert ZeroAmount();
+        irlbtrfly.lock(msg.sender, _btrflyAmt);
         ethprincipalBalance = ethprincipalBalance;
 
     }
     
     function BTRFLYwithdrawExpiredLocksTo() external onlyOwner{
-        irlbtrfly.withdrawExpiredLocksTo(address(this));
+        irlbtrfly.withdrawExpiredLocksTo(msg.sender);
     }
 //2 claim
 
     function claim(Common.Claim[] calldata claims) external{ //2weeks
         irewardsdistributor.claim(claims);
     }
-
+//3
     function claimAndLock(Common.Claim[] calldata claims, uint256 _btrflyAmt) external{//16weeks
         if (_btrflyAmt == 0) revert ZeroAmount();
 
@@ -160,7 +159,11 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         emit Relock(msg.sender, _btrflyAmt);
     }
 
-//3 distribute
+//4 distribute
+    /**
+        @notice this function updates rewardPerBBC based on the relationship between Eth prin bal
+        and actual eth in the contract
+    */
     function updateETHRewardPerBBC() public nonReentrant {
         uint256 ethBal = address(this).balance;
         // If eth available in the contract, update rewardPerBBC, add newRewards to allocatedEthRewards.
@@ -179,11 +182,18 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+        @notice getPendingEthReward returns the amount of ETH that has accrued to the user
+        and has yet to be claimed.
+    */
     function getPendingETHReward(address _user) public view returns (uint256)
     {
         return (balanceOf(_user) * (rewardPerBBC - claimedEpochs[_user]));
     }
     
+    /**
+        @notice internal helper function for claimEthRewards
+    */
     function _claimEthRewards(address _user) internal nonReentrant{
         uint256 currentRewards = getPendingETHReward(_user);
         if (currentRewards > 0) {
@@ -193,6 +203,9 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+        @notice _claimEthRewards is called to claim rewards on behalf of a user.
+    */
     function claimEthRewards(address _user) external{
         require(balanceOf(_user) > 0, "Can only claim if balance of user > 0");
         _claimEthRewards(_user);
