@@ -49,8 +49,8 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     uint256 public constant MaxPublicMint = 2;
     uint256 public constant MaxWhitelistMint = 5;
 
-    string private  baseTokenUri;
-    string public   placeholderTokenUri;
+    string private baseTokenUri;
+    string public placeholderTokenUri;
 
     //deploy smart contract, toggle WL, toggle WL when done, toggle publicSale 
     bool public isRevealed;
@@ -70,7 +70,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     event RewardPerBBCUpdated(uint _rpb, address indexed _callerAddress);
     event Relock(address indexed account, uint256 amount);
     error ZeroAmount();
-    
     
     constructor(uint16 supply, address btrfly) ERC721A("Baby Butterfly Cartel", "BBC") {
         priceBtrfly = 1 ether;
@@ -94,10 +93,10 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     }
 
     //change price
-
     function changepriceBtrfly(uint256 _newPrice) public onlyOwner{
         priceBtrfly = _newPrice;
     }
+
     //WL mints
     function whitelistmintWithBtrfly(bytes32[] memory _merkleProof, uint256 _quantity, uint256 _costBtrfly) external callerIsUser{
         require(whiteListSale, "BBC :: Minting is on Pause");
@@ -132,23 +131,21 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     }
   
 //Treasury functions
-//1
+//1 locks
     function depositBTRFLYlock(uint256 _btrflyAmt) external onlyOwner {
-        if (_btrflyAmt == 0) revert ZeroAmount();
+        //if (_btrflyAmt == 0) revert ZeroAmount();
         irlbtrfly.lock(msg.sender, _btrflyAmt);
         ethprincipalBalance = ethprincipalBalance;
-
     }
     
     function BTRFLYwithdrawExpiredLocksTo() external onlyOwner{
         irlbtrfly.withdrawExpiredLocksTo(msg.sender);
     }
 //2 claim
-
     function claim(Common.Claim[] calldata claims) external{ //2weeks
         irewardsdistributor.claim(claims);
     }
-//3
+//3 relock
     function claimAndLock(Common.Claim[] calldata claims, uint256 _btrflyAmt) external{//16weeks
         if (_btrflyAmt == 0) revert ZeroAmount();
 
@@ -158,7 +155,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
 
         emit Relock(msg.sender, _btrflyAmt);
     }
-
 //4 distribute
     /**
         @notice this function updates rewardPerBBC based on the relationship between Eth prin bal
@@ -212,7 +208,6 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     }
 
 //nft metadata
-
     function _baseURI() internal view virtual override returns (string memory) {
         return baseTokenUri;
     }
@@ -248,7 +243,7 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
         updateCallerReward = _amt;
     }
 
-    //nft
+    //nft onlyowners
     function setTokenUri(string memory _baseTokenUri) external onlyOwner{
         baseTokenUri = _baseTokenUri;
     }
