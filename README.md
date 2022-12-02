@@ -1,15 +1,7 @@
-# Basic Sample Hardhat Project
+This contract is a non-fungible token (NFT) contract that follows the ERC721A standard. It is called BabyButterflyCartelNFT and it allows users to mint, transfer, and manage unique tokens that represent digital assets. The contract is designed to be used in conjunction with a related contract called IRLBTRFLY that is used to manage rewards and incentives for the NFT holders.
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
+The contract includes several features and functions that are specific to its use case. For example, it includes a publicSale boolean variable that determines whether the tokens are available for public sale, and a whiteListSale variable that determines whether the tokens are available for sale to a pre-approved list of addresses. The contract also includes a teamMinted variable that determines whether the contract owner has minted tokens for themselves.
 
-Try running some of the following tasks:
+Additionally, the contract includes a claimedEpochs mapping that tracks the amount of rewards that each address has claimed, and an updateCallerReward variable that determines the percentage of new rewards paid to the function caller as an incentive. The contract also includes an irlbtrfly variable that stores the address of the IRLBTRFLY contract, and an irewardsdistributor variable that stores the address of the IRewardDistributor contract.
 
-```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
-```
+Overall, this contract appears to be a complex and custom implementation of the ERC721A standard, with a number of additional features and functions that are specific to its use case.
