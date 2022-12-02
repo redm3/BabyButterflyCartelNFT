@@ -1,0 +1,9 @@
+yarn add --dev hardhat-contract-sizer
+yarn hardhat size-contracts
+
+npx hardhat clean
+npx hardhat compile
+
+npx hardhat run scripts/deployBabyButterflyCartelNFT.js --network ropsten
+
+npx hardhat verify --network ropsten {contract address} (10000,"0x4bc4bba990fe31d529d987f7b8ccf79f1626e559")
