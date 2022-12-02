@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+//import "@openzeppelin/contracts/math/SafeMath.sol";
 
 contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     using Strings for uint256;
@@ -32,16 +33,13 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     address RLBTRFLYAddress = 0xB4Ce286398C3EeBDE71c63A6A925D7823821c1Ee;
     address IREWARDSDISTRIBUTORAddress = 0xd756DfC1a5AFd5e36Cf88872540778841B318894;
 
-    //Treasury rewards distrib values 
+    //Treasury values 
     // rewardPerBBC tracks the cumulative amount of ETH awarded for each BBC since the protocol's inception.
     uint public rewardPerBBC;
-
-    // ethprincipalBalance tracks the treasury's principal stETH balance.
+    // ethprincipalBalance tracks the treasury's principal ETH balance.
     uint public ethprincipalBalance;//BTRFLY
-
     // allocatedEthRewards tracks the current amount of ETH that has been allocated to god owners.
     uint public allocatedEthRewards;
-
     // updateCallerReward expresses, in basis points, the percentage of newRewards paid to the function
     // caller, as an incentive to pay the gas prices for calling update functions.
     uint public updateCallerReward;
@@ -72,18 +70,20 @@ contract BabyButterflyCartelNFT is ERC721A, Ownable, ReentrancyGuard {
     error ZeroAmount();
     
     constructor(uint16 supply, address btrfly) ERC721A("Baby Butterfly Cartel", "BBC") {
+        //Set contract interface
+        irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
+        irewardsdistributor = IRewardDistributor(IREWARDSDISTRIBUTORAddress);
+        IERC20(Btrfly).approve(RLBTRFLYAddress, type(uint256).max);
+        //set NFT variables
         priceBtrfly = 1 ether;
         maxSupply = supply;
         Btrfly = btrfly;
+        // Initialize treasury values
         ethprincipalBalance = 0;
         allocatedEthRewards = 0;
         rewardPerBBC = 0;
         // set caller reward to 1%
         updateCallerReward = 100;
-        //contract interface
-        irlbtrfly = IRLBTRFLY(RLBTRFLYAddress);
-        irewardsdistributor = IRewardDistributor(IREWARDSDISTRIBUTORAddress);
-        IERC20(Btrfly).approve(RLBTRFLYAddress, type(uint256).max);
     }
 
     //stops botting from contract
