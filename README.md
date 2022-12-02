@@ -5,3 +5,4 @@ The contract includes several features and functions that are specific to its us
 Additionally, the contract includes a claimedEpochs mapping that tracks the amount of rewards that each address has claimed, and an updateCallerReward variable that determines the percentage of new rewards paid to the function caller as an incentive. The contract also includes an irlbtrfly variable that stores the address of the IRLBTRFLY contract, and an irewardsdistributor variable that stores the address of the IRewardDistributor contract.
 
 Overall, this contract appears to be a complex and custom implementation of the ERC721A standard, with a number of additional features and functions that are specific to its use case.
+![BBCFlowChart](https://user-images.githubusercontent.com/56494159/205260236-24bb86c8-7e94-439a-8050-f3090b40b5b8.png)
